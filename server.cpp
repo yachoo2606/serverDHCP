@@ -8,6 +8,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <chrono>
+#include <vector>
 
 
 #define SERVER_PORT 67
@@ -31,7 +33,142 @@ struct dhcp_packet {
     uint8_t options[308];
 };
 
+enum class Status{
+    NONE,
+    IN_PROCESS,
+    RESERVED
+};
 
+std::ostream& operator<<(std::ostream& os, const Status& status) {
+    switch (status) {
+        case Status::NONE:
+            os << "NONE";
+            break;
+        case Status::IN_PROCESS:
+            os << "IN_PROCESS";
+            break;
+        case Status::RESERVED:
+            os << "RESERVED";
+    }
+    return os;
+}
+
+class DHCPReservation{
+    Status status;
+    unsigned char chaddr[16];
+    struct in_addr ip;
+    std::chrono::seconds leeseInSeconds;
+public:
+    DHCPReservation(int seconds, unsigned char *address, Status status_,const char* ipAddress){
+        leeseInSeconds = std::chrono::seconds(seconds);
+        memcpy(&chaddr, address, sizeof(address));
+        status = status_;
+        inet_pton(AF_INET, ipAddress, &ip);
+    }
+
+    DHCPReservation(){
+        leeseInSeconds = std::chrono::seconds(0);
+        std::memset(&chaddr, 0, sizeof(chaddr));
+        status = Status::NONE;
+        std::memset(&ip, 0, sizeof(ip));
+    }
+    ~DHCPReservation(){
+
+    }
+
+    Status getStatus() const {
+        return status;
+    }
+
+    void setStatus(Status newStatus) {
+        status = newStatus;
+    }
+
+    const unsigned char* getChaddr() const {
+        return chaddr;
+    }
+
+    void setChaddr(const unsigned char* address) {
+        std::memcpy(chaddr, address, sizeof(chaddr));
+    }
+
+    std::chrono::seconds getLeaseInSeconds() const {
+        return leeseInSeconds;
+    }
+
+    void setLeaseInSeconds(int seconds) {
+        leeseInSeconds = std::chrono::seconds(seconds);
+    }
+
+    const char* getIpAddress_string() const {
+        // Convert the IP address to a string and return it
+        return inet_ntoa(ip);
+    }
+
+    struct in_addr getIpAddress() const {
+        // Convert the IP address to a string and return it
+        return ip;
+    }
+
+    void setIpAddress(const char* ipAddress) {
+        // Set the IP address using the provided string
+        inet_pton(AF_INET, ipAddress, &ip);
+    }
+
+    void print_mac_address() {
+        printf("%02x:%02x:%02x:%02x:%02x:%02x ",
+           chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5]);
+    }
+};
+
+
+class DHCPReservationPool{
+    struct in_addr startIp;
+    struct in_addr endIp;
+    std::vector<DHCPReservation> reservations;
+
+    void createReservations() {
+        uint32_t startIpNetworkOrder = ntohl(startIp.s_addr);
+        uint32_t endIpNetworkOrder = ntohl(endIp.s_addr);
+
+        for (uint32_t currentIpNetworkOrder = startIpNetworkOrder;
+             currentIpNetworkOrder <= endIpNetworkOrder; ++currentIpNetworkOrder)
+        {   
+            struct in_addr currentIp;
+            currentIp.s_addr = htonl(currentIpNetworkOrder);
+            DHCPReservation reservation(0,new unsigned char[16],Status::NONE,inet_ntoa(currentIp));
+            reservations.push_back(reservation);
+        }
+    }
+
+public:
+    DHCPReservationPool(const char* startIpAddress, const char* endIpAddress){
+        inet_pton(AF_INET, startIpAddress, &startIp);
+        inet_pton(AF_INET, endIpAddress, &endIp);
+        createReservations();
+    }
+
+    void printReservations() const {
+        for (DHCPReservation reservation : reservations) {
+            std::cout << "IP Address: " << reservation.getIpAddress_string() << ", ";
+            std::cout << "Chaddr: ";
+            reservation.print_mac_address();
+            std::cout << " Status: " << reservation.getStatus()<<std::endl;
+        }
+    }
+
+    bool startNewReservation(in_addr address){
+        
+        for(auto &res:reservations){
+            if(res.getIpAddress().s_addr == address.s_addr){
+                res.setStatus(Status::IN_PROCESS);
+                return true;
+            }
+        }
+        return false;
+    }
+
+};
 
 int socketSetup(char* interface_name){
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -73,10 +210,9 @@ int socketSetup(char* interface_name){
     return sock;
 }
 
-
-void print_mac_address(const unsigned char* mac_address) {
-    printf("\tMAC address: %02x:%02x:%02x:%02x:%02x:%02x\n",
-           mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
+void print_mac_address(unsigned char *mac){
+    printf("%02x:%02x:%02x:%02x:%02x:%02x\n",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 void print_dhcp_options(struct dhcp_packet packet) {
@@ -406,12 +542,29 @@ int main(int argc, char *argv[]) {
     }
     
     close(sock);
+
+    // DHCPReservationPool pool(argv[2],argv[3]);
+    // pool.printReservations();
+
+    // struct in_addr addr;
+
+    // std::cout<<"\n\n";
+
+    // inet_pton(AF_INET, "192.168.1.3", &(addr.s_addr));
+    // pool.startNewReservation(addr);
+    // inet_pton(AF_INET, "192.168.1.15", &(addr.s_addr));
+    // pool.startNewReservation(addr);
+    // inet_pton(AF_INET, "192.168.1.20", &(addr.s_addr));
+    // pool.startNewReservation(addr);
+
+    // pool.printReservations();
+
     return 0;
 }
 
-//na kliencie testowa z 
+//on clinet test with 
 
 // dhclient -4 -d
 
-//cat /var/log/syslog | grep -Ei 'dhcp'
-//check gw:  ip routess
+//cat /var/log/syslog | grep -Ei 'dhcp' //check logs for errors
+//check gw:  ip route

@@ -130,13 +130,13 @@ class DHCPReservationPool{
     void createReservations() {
         uint32_t startIpNetworkOrder = ntohl(startIp.s_addr);
         uint32_t endIpNetworkOrder = ntohl(endIp.s_addr);
-
+        unsigned char zeroChaddr[16] = {0};
         for (uint32_t currentIpNetworkOrder = startIpNetworkOrder;
              currentIpNetworkOrder <= endIpNetworkOrder; ++currentIpNetworkOrder)
         {   
             struct in_addr currentIp;
             currentIp.s_addr = htonl(currentIpNetworkOrder);
-            DHCPReservation reservation(0,new unsigned char[16],Status::NONE,inet_ntoa(currentIp));
+            DHCPReservation reservation(0,zeroChaddr,Status::NONE,inet_ntoa(currentIp));
             reservations.push_back(reservation);
         }
     }
@@ -482,69 +482,69 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <interface>\n";
-        return 1;
-    }
+    // if (argc < 2) {
+    //     std::cerr << "Usage: " << argv[0] << " <interface>\n";
+    //     return 1;
+    // }
 
-    int sock = socketSetup(argv[1]);
+    // int sock = socketSetup(argv[1]);
 
-    dhcp_packet packet;
-    ssize_t recv_size;
-    struct sockaddr_in client_address;
-    socklen_t client_address_len = sizeof(client_address);
-    dhcp_packet dhcp_offer;
-    while (true) {
-        recv_size = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr*)&client_address, &client_address_len);
-        std::cout<<"Reciveed packet!"<<std::endl;
-        if (recv_size < 0) {
-            std::cerr << "Failed to receive DHCP packet\n";
-            continue;
-        }
+    // dhcp_packet packet;
+    // ssize_t recv_size;
+    // struct sockaddr_in client_address;
+    // socklen_t client_address_len = sizeof(client_address);
+    // dhcp_packet dhcp_offer;
+    // while (true) {
+    //     recv_size = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr*)&client_address, &client_address_len);
+    //     std::cout<<"Reciveed packet!"<<std::endl;
+    //     if (recv_size < 0) {
+    //         std::cerr << "Failed to receive DHCP packet\n";
+    //         continue;
+    //     }
         
-        // if (recv_size != sizeof(packet)) {
-        //     std::cout<<"recv_size: "<<recv_size<<" =!= "<<sizeof(packet)<<std::endl;
-        //     std::cerr << "Received incomplete DHCP packet\n";
-        //     continue;
-        // }
-        if(!checkIfDHCP(packet)) continue;
+    //     // if (recv_size != sizeof(packet)) {
+    //     //     std::cout<<"recv_size: "<<recv_size<<" =!= "<<sizeof(packet)<<std::endl;
+    //     //     std::cerr << "Received incomplete DHCP packet\n";
+    //     //     continue;
+    //     // }
+    //     if(!checkIfDHCP(packet)) continue;
         
-        print_dhcp_packet(packet);
+    //     print_dhcp_packet(packet);
 
-        if(isDHCPDiscovery(&packet)){
-            memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_offer_packet(&dhcp_offer, &packet);
-            print_dhcp_packet(dhcp_offer);
-        }
+    //     if(isDHCPDiscovery(&packet)){
+    //         memset(&dhcp_offer,0,sizeof(dhcp_offer));
+    //         fill_offer_packet(&dhcp_offer, &packet);
+    //         print_dhcp_packet(dhcp_offer);
+    //     }
 
-        if(isDHCPRequest(&packet)){
-            memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_ack_packet(&dhcp_offer,&packet);
-        }
+    //     if(isDHCPRequest(&packet)){
+    //         memset(&dhcp_offer,0,sizeof(dhcp_offer));
+    //         fill_ack_packet(&dhcp_offer,&packet);
+    //     }
 
-        if(isDHCPAck(&packet)){
+    //     if(isDHCPAck(&packet)){
 
-        }
+    //     }
         
-        memset(&client_address,0,sizeof(client_address));
-        client_address.sin_family = AF_INET;
-        client_address.sin_port = htons(68);
-        client_address.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    //     memset(&client_address,0,sizeof(client_address));
+    //     client_address.sin_family = AF_INET;
+    //     client_address.sin_port = htons(68);
+    //     client_address.sin_addr.s_addr = htonl(INADDR_BROADCAST);
 
-        ssize_t sent_size = sendto(sock, &dhcp_offer, sizeof(dhcp_offer), 0, (struct sockaddr*)&client_address, sizeof(client_address));
-        if(sent_size < 0){
-            std::cerr << "Failed to send DHCP offer packet to ";
-            print_mac_address(packet.chaddr);
-            continue;
-        }
+    //     ssize_t sent_size = sendto(sock, &dhcp_offer, sizeof(dhcp_offer), 0, (struct sockaddr*)&client_address, sizeof(client_address));
+    //     if(sent_size < 0){
+    //         std::cerr << "Failed to send DHCP offer packet to ";
+    //         print_mac_address(packet.chaddr);
+    //         continue;
+    //     }
 
-        // print_mac_address(packet.chaddr);
-    }
+    //     // print_mac_address(packet.chaddr);
+    // }
     
-    close(sock);
+    // close(sock);
 
-    // DHCPReservationPool pool(argv[2],argv[3]);
-    // pool.printReservations();
+    DHCPReservationPool pool(argv[2],argv[3]);
+    pool.printReservations();
 
     // struct in_addr addr;
 

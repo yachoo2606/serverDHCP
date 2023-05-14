@@ -10,9 +10,13 @@
 #include <arpa/inet.h>
 #include <chrono>
 #include <vector>
+#include <string>
 
 
 #define SERVER_PORT 67
+#define RESERVATION_SECONDS 3600
+
+using namespace std;
 
 struct dhcp_packet {
     uint8_t op;
@@ -153,20 +157,48 @@ public:
             std::cout << "IP Address: " << reservation.getIpAddress_string() << ", ";
             std::cout << "Chaddr: ";
             reservation.print_mac_address();
-            std::cout << " Status: " << reservation.getStatus()<<std::endl;
+            std::cout << " Status: " << reservation.getStatus();
+            std::cout << " Leese: " << reservation.getLeaseInSeconds().count() <<std::endl;
         }
     }
 
-    bool startNewReservation(in_addr address){
-        
-        for(auto &res:reservations){
-            if(res.getIpAddress().s_addr == address.s_addr){
+    const char* startNewReservation(const unsigned char* chaddr) {
+        for (auto& res : reservations) {
+            if (res.getStatus() == Status::NONE) {
                 res.setStatus(Status::IN_PROCESS);
-                return true;
+                res.setChaddr(chaddr);
+                res.setLeaseInSeconds(RESERVATION_SECONDS);
+                return res.getIpAddress_string();
+            } else if (res.getStatus() == Status::IN_PROCESS && std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0) {
+                // The MAC address is already assigned to an IP address
+                return "false";
             }
         }
-        return false;
+        return "false"; // No available reservations
     }
+    
+    const char* confirmReservation(const unsigned char* chaddr){
+        for(auto& res: reservations){
+            if(res.getStatus() != Status::NONE &&
+                std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0){
+                    res.setStatus(Status::RESERVED);
+                    res.setLeaseInSeconds(RESERVATION_SECONDS);
+                    return res.getIpAddress_string();
+            }
+        }
+        return "false";
+    }
+    
+    const char* getIPaddr(const unsigned char* chaddr){
+        for(auto &res: reservations){
+            if(res.getStatus() != Status::NONE &&
+                std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0){
+                    return res.getIpAddress_string();
+            }
+        }
+        return "false";
+    }
+
 
 };
 
@@ -368,7 +400,7 @@ bool checkIfDHCP(dhcp_packet packet){
     return true;
 }
 
-void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
+void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool) {
     // Fill in the header fields of the DHCP offer packet
     packet->op = 2;
     packet->htype = 1;
@@ -378,7 +410,9 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
     packet->secs = 0;
     packet->flags = htons(0x8000);
     packet->ciaddr.s_addr = 0;
-    packet->yiaddr.s_addr = inet_addr("192.168.1.3"); // IP address offered to the client
+    // packet->yiaddr.s_addr = inet_addr("192.168.1.3"); // IP address offered to the client
+    packet->yiaddr.s_addr = inet_addr(pool.startNewReservation(request_packet->chaddr)); // IP address offered to the client
+    
     packet->siaddr.s_addr = inet_addr("192.168.1.2"); // IP address of the DHCP server
     packet->giaddr.s_addr = 0;
     memcpy(packet->chaddr, request_packet->chaddr, 6); // Copy the MAC address from the request packet
@@ -431,7 +465,7 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
     packet->options[offset++] = 255; // End of options marker
 }
 
-void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
+void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool) {
     // Fill in the header fields of the DHCP ACK packet
     packet->op = 2;
     packet->htype = 1;
@@ -441,7 +475,7 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
     packet->secs = 0;
     packet->flags = htons(0x8000);
     packet->ciaddr.s_addr = 0;
-    packet->yiaddr.s_addr = inet_addr("192.168.1.3"); // IP address assigned to the client
+    packet->yiaddr.s_addr = inet_addr(pool.confirmReservation(request_packet->chaddr)); // IP address assigned to the client
     packet->siaddr.s_addr = inet_addr("192.168.1.2"); // IP address of the DHCP server
     packet->giaddr.s_addr = 0;
     memcpy(packet->chaddr, request_packet->chaddr, 16); // Copy the MAC address from the request packet
@@ -482,69 +516,76 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet) {
 }
 
 int main(int argc, char *argv[]) {
-    // if (argc < 2) {
-    //     std::cerr << "Usage: " << argv[0] << " <interface>\n";
-    //     return 1;
-    // }
-
-    // int sock = socketSetup(argv[1]);
-
-    // dhcp_packet packet;
-    // ssize_t recv_size;
-    // struct sockaddr_in client_address;
-    // socklen_t client_address_len = sizeof(client_address);
-    // dhcp_packet dhcp_offer;
-    // while (true) {
-    //     recv_size = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr*)&client_address, &client_address_len);
-    //     std::cout<<"Reciveed packet!"<<std::endl;
-    //     if (recv_size < 0) {
-    //         std::cerr << "Failed to receive DHCP packet\n";
-    //         continue;
-    //     }
-        
-    //     // if (recv_size != sizeof(packet)) {
-    //     //     std::cout<<"recv_size: "<<recv_size<<" =!= "<<sizeof(packet)<<std::endl;
-    //     //     std::cerr << "Received incomplete DHCP packet\n";
-    //     //     continue;
-    //     // }
-    //     if(!checkIfDHCP(packet)) continue;
-        
-    //     print_dhcp_packet(packet);
-
-    //     if(isDHCPDiscovery(&packet)){
-    //         memset(&dhcp_offer,0,sizeof(dhcp_offer));
-    //         fill_offer_packet(&dhcp_offer, &packet);
-    //         print_dhcp_packet(dhcp_offer);
-    //     }
-
-    //     if(isDHCPRequest(&packet)){
-    //         memset(&dhcp_offer,0,sizeof(dhcp_offer));
-    //         fill_ack_packet(&dhcp_offer,&packet);
-    //     }
-
-    //     if(isDHCPAck(&packet)){
-
-    //     }
-        
-    //     memset(&client_address,0,sizeof(client_address));
-    //     client_address.sin_family = AF_INET;
-    //     client_address.sin_port = htons(68);
-    //     client_address.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-
-    //     ssize_t sent_size = sendto(sock, &dhcp_offer, sizeof(dhcp_offer), 0, (struct sockaddr*)&client_address, sizeof(client_address));
-    //     if(sent_size < 0){
-    //         std::cerr << "Failed to send DHCP offer packet to ";
-    //         print_mac_address(packet.chaddr);
-    //         continue;
-    //     }
-
-    //     // print_mac_address(packet.chaddr);
-    // }
-    
-    // close(sock);
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[1] << " <interface>\n";
+        return 1;
+    }
+    struct in_addr startIp;
+    struct in_addr endIp;
+    inet_pton(AF_INET, argv[2], &startIp);
+    inet_pton(AF_INET, argv[3], &endIp);
+    uint32_t startIpNetworkOrder = ntohl(startIp.s_addr);
+    uint32_t endIpNetworkOrder = ntohl(endIp.s_addr);
+    if(startIpNetworkOrder > endIpNetworkOrder){
+        std::cerr << "Starting IP must be greater then ending IP"<<std::endl;
+        return 1;
+    }
 
     DHCPReservationPool pool(argv[2],argv[3]);
     pool.printReservations();
+    int sock = socketSetup(argv[1]);
+
+    dhcp_packet packet;
+    ssize_t recv_size;
+    struct sockaddr_in client_address;
+    socklen_t client_address_len = sizeof(client_address);
+    dhcp_packet dhcp_offer;
+    while (true) {
+        recv_size = recvfrom(sock, &packet, sizeof(packet), 0, (struct sockaddr*)&client_address, &client_address_len);
+        std::cout<<"Reciveed packet!"<<std::endl;
+        if (recv_size < 0) {
+            std::cerr << "Failed to receive DHCP packet\n";
+            continue;
+        }
+        
+        if(!checkIfDHCP(packet)) continue;
+        
+        print_dhcp_packet(packet);
+
+        if(isDHCPDiscovery(&packet)){
+            memset(&dhcp_offer,0,sizeof(dhcp_offer));
+            fill_offer_packet(&dhcp_offer, &packet, pool);
+            print_dhcp_packet(dhcp_offer);
+        }
+
+        if(isDHCPRequest(&packet)){
+            memset(&dhcp_offer,0,sizeof(dhcp_offer));
+            fill_ack_packet(&dhcp_offer,&packet, pool);
+        }
+
+        if(isDHCPAck(&packet)){
+
+        }
+        
+        memset(&client_address,0,sizeof(client_address));
+        client_address.sin_family = AF_INET;
+        client_address.sin_port = htons(68);
+        client_address.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+        ssize_t sent_size = sendto(sock, &dhcp_offer, sizeof(dhcp_offer), 0, (struct sockaddr*)&client_address, sizeof(client_address));
+        if(sent_size < 0){
+            std::cerr << "Failed to send DHCP offer packet to ";
+            print_mac_address(packet.chaddr);
+            continue;
+        }
+        pool.printReservations();
+        // print_mac_address(packet.chaddr);
+    }
+    
+    close(sock);
+
+    // DHCPReservationPool pool(argv[2],argv[3]);
+    // pool.printReservations();
 
     // struct in_addr addr;
 

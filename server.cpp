@@ -18,6 +18,7 @@
 
 using namespace std;
 
+
 struct dhcp_packet {
     uint8_t op;
     uint8_t htype;

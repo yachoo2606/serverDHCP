@@ -1,9 +1,20 @@
-# All Target
-all:
-	g++ $(PCAPPP_INCLUDES) -c -o main.o server.cpp
-	g++ $(PCAPPP_LIBS_DIR) -o program main.o $(PCAPPP_LIBS)
-	rm main.o
+CXX = g++
+CXXFLAGS = -g -Wall
+TARGET = program
+SOURCES = main.cpp DHCPReservation.cpp DHCPReservationPool.cpp
+HEADERS = DHCPReservation.h DHCPReservationPool.h
+OBJECTS = $(SOURCES:.cpp=.o)
 
-# Clean Target
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJECTS)
+	rm -f *.o
+
+%.o: %.cpp $(HEADERS)
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
 clean:
-	rm main.o
+	rm -f *.o
+
+# Build with: make -B

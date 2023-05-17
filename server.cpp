@@ -11,7 +11,7 @@
 #include <chrono>
 #include <vector>
 #include <string>
-
+#include <thread>
 
 #define SERVER_PORT 67
 #define RESERVATION_SECONDS 3600
@@ -124,6 +124,18 @@ public:
         printf("%02x:%02x:%02x:%02x:%02x:%02x ",
            chaddr[0], chaddr[1], chaddr[2], chaddr[3], chaddr[4], chaddr[5]);
     }
+
+    void decreseLeese(){
+        if(this->status == Status::RESERVED){
+            if(this->leeseInSeconds.count() > 0){
+                this->leeseInSeconds--;
+                if(this->leeseInSeconds.count() == 0){
+                    this->status = Status::NONE;
+                }
+            }
+        }
+    }
+
 };
 
 
@@ -146,6 +158,15 @@ class DHCPReservationPool{
         }
     }
 
+    void decreaseLeease(){
+        while(true){
+            for(auto& reservation:reservations){
+                reservation.decreseLeese();
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    }
+
 public:
     DHCPReservationPool(const char* startIpAddress, const char* endIpAddress){
         inet_pton(AF_INET, startIpAddress, &startIp);
@@ -153,13 +174,29 @@ public:
         createReservations();
     }
 
+    void startThreadPrinting(){
+        std::thread printing(&DHCPReservationPool::printReservations, this);
+        printing.detach();
+        
+    }
+
+    void startThreadDecreasing(){
+        std::thread decreasing(&DHCPReservationPool::decreaseLeease,this);
+        decreasing.detach();
+    }
+
     void printReservations() const {
-        for (DHCPReservation reservation : reservations) {
-            std::cout << "IP Address: " << reservation.getIpAddress_string() << ", ";
-            std::cout << "Chaddr: ";
-            reservation.print_mac_address();
-            std::cout << " Status: " << reservation.getStatus();
-            std::cout << " Leese: " << reservation.getLeaseInSeconds().count() <<std::endl;
+        while(true){
+            std::system("clear");
+            for (DHCPReservation reservation : reservations) {
+                std::cout << "IP Address: " << reservation.getIpAddress_string() << ", ";
+                std::cout << "Chaddr: ";
+                reservation.print_mac_address();
+                std::cout << " Status: " << reservation.getStatus();
+                std::cout << " Leese: " << reservation.getLeaseInSeconds().count() <<std::endl;
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            std::system("clear");
         }
     }
 
@@ -533,7 +570,8 @@ int main(int argc, char *argv[]) {
     }
 
     DHCPReservationPool pool(argv[2],argv[3]);
-    pool.printReservations();
+    pool.startThreadPrinting();
+    pool.startThreadDecreasing();
     int sock = socketSetup(argv[1]);
 
     dhcp_packet packet;
@@ -579,7 +617,7 @@ int main(int argc, char *argv[]) {
             print_mac_address(packet.chaddr);
             continue;
         }
-        pool.printReservations();
+        // pool.printReservations();
         // print_mac_address(packet.chaddr);
     }
     

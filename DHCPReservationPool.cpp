@@ -95,7 +95,7 @@ const char* DHCPReservationPool::startNewReservation(const unsigned char* chaddr
             return res.getIpAddress_string();
         } else if (res.getStatus() == Status::IN_PROCESS && std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0) {
             // The MAC address is already assigned to an IP address
-            return "false";
+            res.getIpAddress_string();
         }
     }
     return "false"; // No available reservations

@@ -251,8 +251,17 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
     packet->flags = htons(0x8000);
     packet->ciaddr.s_addr = 0;
     // packet->yiaddr.s_addr = inet_addr("192.168.1.3"); // IP address offered to the client
-    packet->yiaddr.s_addr = inet_addr(pool.startNewReservation(request_packet->chaddr)); // IP address offered to the client
     
+    
+    const char* address = pool.startNewReservation(request_packet->chaddr);
+
+    if(address == "false"){
+        return;
+    }
+
+    packet->yiaddr.s_addr = inet_addr(address); // IP address offered to the client
+
+
     packet->siaddr.s_addr = inet_addr("192.168.1.2"); // IP address of the DHCP server
     packet->giaddr.s_addr = 0;
     memcpy(packet->chaddr, request_packet->chaddr, 6); // Copy the MAC address from the request packet
@@ -315,6 +324,8 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
     packet->secs = 0;
     packet->flags = htons(0x8000);
     packet->ciaddr.s_addr = 0;
+    
+
     packet->yiaddr.s_addr = inet_addr(pool.confirmReservation(request_packet->chaddr)); // IP address assigned to the client
     packet->siaddr.s_addr = inet_addr("192.168.1.2"); // IP address of the DHCP server
     packet->giaddr.s_addr = 0;
@@ -349,6 +360,13 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
     packet->options[offset++] = 14;
     packet->options[offset++] = 1;
     packet->options[offset++] = 0;
+
+    packet->options[offset++] = 54; // DHCP server identifier option
+    packet->options[offset++] = 4;  // Length of the option data
+    packet->options[offset++] = 192;
+    packet->options[offset++] = 168;
+    packet->options[offset++] = 1;
+    packet->options[offset++] = 2;
 
     // Add other DHCP options as needed
 

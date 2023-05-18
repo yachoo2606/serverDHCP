@@ -1,3 +1,10 @@
+
+/*  HOW TO RUN PROGRAM
+ * 
+ * ./program enp0s3 192.168.1.4 192.168.1.10 255.255.255.0 192.168.1.1
+ * 
+*/
+
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
@@ -240,7 +247,7 @@ bool checkIfDHCP(dhcp_packet packet){
     return true;
 }
 
-void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool) {
+void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool, const char* subnetMask, const char* routerIP) {
     // Fill in the header fields of the DHCP offer packet
     packet->op = 2;
     packet->htype = 1;
@@ -278,17 +285,31 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
 
     packet->options[offset++] = 1;  // Subnet mask option
     packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 255;
-    packet->options[offset++] = 255;
-    packet->options[offset++] = 255;
-    packet->options[offset++] = 0;
+
+    const char* subnetMaskBytes = subnetMask;
+    for(int i=0;i<4;i++){
+        packet->options[offset++] = atoi(subnetMaskBytes);
+        subnetMaskBytes = strchr(subnetMaskBytes, '.')+1;
+    }
+
+    // packet->options[offset++] = 255;
+    // packet->options[offset++] = 255;
+    // packet->options[offset++] = 255;
+    // packet->options[offset++] = 0;
 
     packet->options[offset++] = 3;  // Router option
     packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 192;
-    packet->options[offset++] = 168;
-    packet->options[offset++] = 1;
-    packet->options[offset++] = 1;
+
+    const char* routerIPBytes = routerIP;
+    for (int i = 0; i < 4; i++) {
+        packet->options[offset++] = atoi(routerIPBytes);
+        routerIPBytes = strchr(routerIPBytes, '.') + 1;
+    }
+
+    // packet->options[offset++] = 192;
+    // packet->options[offset++] = 168;
+    // packet->options[offset++] = 1;
+    // packet->options[offset++] = 1;
 
     packet->options[offset++] = 51; // IP address lease time option
     packet->options[offset++] = 4;  // Length of the option data
@@ -314,7 +335,7 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
     packet->options[offset++] = 255; // End of options marker
 }
 
-void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool) {
+void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool,  const char* subnetMask, const char* routerIP) {
     // Fill in the header fields of the DHCP ACK packet
     packet->op = 2;
     packet->htype = 1;
@@ -342,17 +363,31 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
 
     packet->options[offset++] = 1;  // Subnet mask option
     packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 255;
-    packet->options[offset++] = 255;
-    packet->options[offset++] = 255;
-    packet->options[offset++] = 0;
+
+    const char* subnetMaskBytes = subnetMask;
+    for(int i=0;i<4;i++){
+        packet->options[offset++] = atoi(subnetMaskBytes);
+        subnetMaskBytes = strchr(subnetMaskBytes, '.')+1;
+    }
+
+    // packet->options[offset++] = 255;
+    // packet->options[offset++] = 255;
+    // packet->options[offset++] = 255;
+    // packet->options[offset++] = 0;
 
     packet->options[offset++] = 3;  // Router option
     packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 192;
-    packet->options[offset++] = 168;
-    packet->options[offset++] = 1;
-    packet->options[offset++] = 1;
+
+    const char* routerIPBytes = routerIP;
+    for (int i = 0; i < 4; i++) {
+        packet->options[offset++] = atoi(routerIPBytes);
+        routerIPBytes = strchr(routerIPBytes, '.') + 1;
+    }
+
+    // packet->options[offset++] = 192;
+    // packet->options[offset++] = 168;
+    // packet->options[offset++] = 1;
+    // packet->options[offset++] = 1;
 
     packet->options[offset++] = 51;  // Subnet mask option
     packet->options[offset++] = 4;  // Length of the option data
@@ -413,13 +448,13 @@ int main(int argc, char *argv[]) {
 
         if(isDHCPDiscovery(&packet)){
             memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_offer_packet(&dhcp_offer, &packet, pool);
+            fill_offer_packet(&dhcp_offer, &packet, pool, argv[4], argv[5]);
             print_dhcp_packet(dhcp_offer);
         }
 
         if(isDHCPRequest(&packet)){
             memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_ack_packet(&dhcp_offer,&packet, pool);
+            fill_ack_packet(&dhcp_offer,&packet, pool, argv[4], argv[5]);
         }
 
         if(isDHCPAck(&packet)){
@@ -461,10 +496,3 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
-
-//on clinet test with 
-
-// dhclient -4 -d
-
-//cat /var/log/syslog | grep -Ei 'dhcp' //check logs for errors
-//check gw:  ip route

@@ -314,14 +314,14 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
     packet->options[offset++] = 51; // IP address lease time option
     packet->options[offset++] = 4;  // Length of the option data
     packet->options[offset++] = 0;
-    packet->options[offset++] = 0;
-    packet->options[offset++] = 1;
+    packet->options[offset++] = 14;
     packet->options[offset++] = 1;  // Lease time in seconds
+    packet->options[offset++] = 0;
 
-    packet->options[offset++] = 6; // IP address lease time option
+    packet->options[offset++] = 6;  // DNS SERVER option
     packet->options[offset++] = 4;  // Length of the option data
     packet->options[offset++] = 192;
-    packet->options[offset++] = 160;
+    packet->options[offset++] = 168;
     packet->options[offset++] = 1;  // Lease time in seconds
     packet->options[offset++] = 1;
 
@@ -389,7 +389,14 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
     // packet->options[offset++] = 1;
     // packet->options[offset++] = 1;
 
-    packet->options[offset++] = 51;  // Subnet mask option
+    packet->options[offset++] = 6; // DNS SERVER option
+    packet->options[offset++] = 4;  // Length of the option data
+    packet->options[offset++] = 192;
+    packet->options[offset++] = 168;
+    packet->options[offset++] = 1;
+    packet->options[offset++] = 1;
+
+    packet->options[offset++] = 51;  // leese TIME
     packet->options[offset++] = 4;  // Length of the option data
     packet->options[offset++] = 0;
     packet->options[offset++] = 14;

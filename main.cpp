@@ -253,7 +253,7 @@ bool checkIfDHCP(dhcp_packet packet){
     return true;
 }
 
-void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool, const char* subnetMask, const char* routerIP, int leeseTime, const char* DNSaddr) {
+void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool, const char* subnetMask, const char* routerIP, int leeseTime, const char* DNSaddr, const char* serverIP) {
     // Fill in the header fields of the DHCP offer packet
     packet->op = 2;
     packet->htype = 1;
@@ -265,7 +265,7 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
     packet->ciaddr.s_addr = 0;
     // packet->yiaddr.s_addr = inet_addr("192.168.1.3"); // IP address offered to the client
     
-    
+
     const char* address = pool.startNewReservation(request_packet->chaddr);
 
     if(address == "false"){
@@ -273,9 +273,9 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
     }
 
     packet->yiaddr.s_addr = inet_addr(address); // IP address offered to the client
+    
 
-
-    packet->siaddr.s_addr = inet_addr("192.168.1.2"); // IP address of the DHCP server
+    packet->siaddr.s_addr = inet_addr(serverIP); // IP address of the DHCP server
     packet->giaddr.s_addr = 0;
     memcpy(packet->chaddr, request_packet->chaddr, 6); // Copy the MAC address from the request packet
     memset(&packet->chaddr[6], 0, 10); // Fill the remaining bytes with zeros
@@ -328,15 +328,16 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
 
     packet->options[offset++] = 54; // DHCP server identifier option
     packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 192;
-    packet->options[offset++] = 168;
-    packet->options[offset++] = 1;
-    packet->options[offset++] = 2;
+    const char* DHCPaddr = serverIP;
+    for(int i=0;i<4;i++){
+        packet->options[offset++] = atoi(DHCPaddr);
+        DHCPaddr = strchr(DHCPaddr, '.') + 1;
+    }
 
     packet->options[offset++] = 255; // End of options marker
 }
 
-void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool,  const char* subnetMask, const char* routerIP, int leeseTime, const char* DNSaddr) {
+void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool,  const char* subnetMask, const char* routerIP, int leeseTime, const char* DNSaddr, const char* serverIP) {
     // Fill in the header fields of the DHCP ACK packet
     packet->op = 2;
     packet->htype = 1;
@@ -349,7 +350,7 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
     
 
     packet->yiaddr.s_addr = inet_addr(pool.confirmReservation(request_packet->chaddr)); // IP address assigned to the client
-    packet->siaddr.s_addr = inet_addr("192.168.1.2"); // IP address of the DHCP server
+    packet->siaddr.s_addr = inet_addr(serverIP); // IP address of the DHCP server
     packet->giaddr.s_addr = 0;
     memcpy(packet->chaddr, request_packet->chaddr, 16); // Copy the MAC address from the request packet
     memset(packet->sname, 0, sizeof(packet->sname));
@@ -400,12 +401,11 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
 
     packet->options[offset++] = 54; // DHCP server identifier option
     packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 192;
-    packet->options[offset++] = 168;
-    packet->options[offset++] = 1;
-    packet->options[offset++] = 2;
-
-
+    const char* DHCPaddr = serverIP;
+    for(int i=0;i<4;i++){
+        packet->options[offset++] = atoi(DHCPaddr);
+        DHCPaddr = strchr(DHCPaddr, '.') + 1;
+    }
     packet->options[offset++] = 255; // End of options marker
 }
 
@@ -433,6 +433,23 @@ int main(int argc, char *argv[]) {
     pool.startThreadDecreasing();
     int sock = socketSetup(argv[1]);
 
+    //get your own IP ADDR
+    string serverIP;
+    struct ifreq ifr;
+    std::memset(&ifr,0,sizeof(ifr));
+    std::strcpy(ifr.ifr_name, argv[1]);
+    if(ioctl(sock, SIOCGIFADDR, &ifr) == 0){
+        struct sockaddr_in* addr = reinterpret_cast<struct sockaddr_in*>(&ifr.ifr_addr);
+        serverIP = inet_ntoa(addr->sin_addr);
+        // std::cout << "IP address: " << serverIP << std::endl;
+        
+    }else{
+        std::cerr<<"Failed to retrieve IP addres"<<std::endl;
+        return 0;
+    }
+
+    
+
     dhcp_packet packet;
     ssize_t recv_size;
     struct sockaddr_in client_address;
@@ -452,13 +469,13 @@ int main(int argc, char *argv[]) {
 
         if(isDHCPDiscovery(&packet)){
             memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_offer_packet(&dhcp_offer, &packet, pool, argv[4], argv[5],leeseTime, argv[7]);
+            fill_offer_packet(&dhcp_offer, &packet, pool, argv[4], argv[5],leeseTime, argv[7], serverIP.c_str());
             print_dhcp_packet(dhcp_offer);
         }
 
         if(isDHCPRequest(&packet)){
             memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_ack_packet(&dhcp_offer,&packet, pool, argv[4], argv[5], leeseTime, argv[7]);
+            fill_ack_packet(&dhcp_offer,&packet, pool, argv[4], argv[5], leeseTime, argv[7], serverIP.c_str());
         }
 
         if(isDHCPAck(&packet)){

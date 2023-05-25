@@ -10,6 +10,7 @@
 class DHCPReservationPool{
     struct in_addr startIp;
     struct in_addr endIp;
+    int leeseTime;
     std::vector<DHCPReservation> reservations;
 
     void createReservations();
@@ -17,7 +18,7 @@ class DHCPReservationPool{
     void decreaseLeease();
 
 public:
-    DHCPReservationPool(const char* startIpAddress, const char* endIpAddress);
+    DHCPReservationPool(const char* startIpAddress, const char* endIpAddress, int leeseTime);
 
     void startThreadPrinting();
 

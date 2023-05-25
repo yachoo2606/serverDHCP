@@ -1,9 +1,15 @@
 
-/*  HOW TO RUN PROGRAM
+/*  HOW TO CONFIGURE PROGRAM
+ *
+ * to compile program type in console: 
  * 
- * ./program enp0s3 192.168.1.4 192.168.1.10 255.255.255.0 192.168.1.1
+ * make
  * 
-*/
+ * to run program:
+ * 
+ * ./program <interface> <startingIP> <endingIP> <mask> <default gateway> <leese time> <DNSaddr>
+ * 
+ */
 
 #include <iostream>
 #include <cstring>
@@ -247,7 +253,7 @@ bool checkIfDHCP(dhcp_packet packet){
     return true;
 }
 
-void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool, const char* subnetMask, const char* routerIP) {
+void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool, const char* subnetMask, const char* routerIP, int leeseTime) {
     // Fill in the header fields of the DHCP offer packet
     packet->op = 2;
     packet->htype = 1;
@@ -292,10 +298,6 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
         subnetMaskBytes = strchr(subnetMaskBytes, '.')+1;
     }
 
-    // packet->options[offset++] = 255;
-    // packet->options[offset++] = 255;
-    // packet->options[offset++] = 255;
-    // packet->options[offset++] = 0;
 
     packet->options[offset++] = 3;  // Router option
     packet->options[offset++] = 4;  // Length of the option data
@@ -306,17 +308,13 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
         routerIPBytes = strchr(routerIPBytes, '.') + 1;
     }
 
-    // packet->options[offset++] = 192;
-    // packet->options[offset++] = 168;
-    // packet->options[offset++] = 1;
-    // packet->options[offset++] = 1;
 
-    packet->options[offset++] = 51; // IP address lease time option
-    packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 0;
-    packet->options[offset++] = 14;
-    packet->options[offset++] = 1;  // Lease time in seconds
-    packet->options[offset++] = 0;
+    packet->options[offset++] = 51;  // leese TIME
+    packet->options[offset++] = 4;   // Length of the option data
+    packet->options[offset++] = (leeseTime >> 24) & 0xFF;
+    packet->options[offset++] = (leeseTime >> 16) & 0xFF;
+    packet->options[offset++] = (leeseTime >> 8) & 0xFF;
+    packet->options[offset++] = leeseTime & 0xFF;
 
     packet->options[offset++] = 6;  // DNS SERVER option
     packet->options[offset++] = 4;  // Length of the option data
@@ -335,7 +333,7 @@ void fill_offer_packet(dhcp_packet* packet, const dhcp_packet* request_packet, D
     packet->options[offset++] = 255; // End of options marker
 }
 
-void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool,  const char* subnetMask, const char* routerIP) {
+void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHCPReservationPool &pool,  const char* subnetMask, const char* routerIP, int leeseTime) {
     // Fill in the header fields of the DHCP ACK packet
     packet->op = 2;
     packet->htype = 1;
@@ -370,10 +368,6 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
         subnetMaskBytes = strchr(subnetMaskBytes, '.')+1;
     }
 
-    // packet->options[offset++] = 255;
-    // packet->options[offset++] = 255;
-    // packet->options[offset++] = 255;
-    // packet->options[offset++] = 0;
 
     packet->options[offset++] = 3;  // Router option
     packet->options[offset++] = 4;  // Length of the option data
@@ -384,10 +378,6 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
         routerIPBytes = strchr(routerIPBytes, '.') + 1;
     }
 
-    // packet->options[offset++] = 192;
-    // packet->options[offset++] = 168;
-    // packet->options[offset++] = 1;
-    // packet->options[offset++] = 1;
 
     packet->options[offset++] = 6; // DNS SERVER option
     packet->options[offset++] = 4;  // Length of the option data
@@ -397,11 +387,11 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
     packet->options[offset++] = 1;
 
     packet->options[offset++] = 51;  // leese TIME
-    packet->options[offset++] = 4;  // Length of the option data
-    packet->options[offset++] = 0;
-    packet->options[offset++] = 14;
-    packet->options[offset++] = 1;
-    packet->options[offset++] = 0;
+    packet->options[offset++] = 4;   // Length of the option data
+    packet->options[offset++] = (leeseTime >> 24) & 0xFF;
+    packet->options[offset++] = (leeseTime >> 16) & 0xFF;
+    packet->options[offset++] = (leeseTime >> 8) & 0xFF;
+    packet->options[offset++] = leeseTime & 0xFF;
 
     packet->options[offset++] = 54; // DHCP server identifier option
     packet->options[offset++] = 4;  // Length of the option data
@@ -410,16 +400,16 @@ void fill_ack_packet(dhcp_packet* packet, const dhcp_packet* request_packet, DHC
     packet->options[offset++] = 1;
     packet->options[offset++] = 2;
 
-    // Add other DHCP options as needed
 
     packet->options[offset++] = 255; // End of options marker
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[1] << " <interface>\n";
+    if (argc < 7) {
+        std::cerr << "Usage: " << argv[1] << " <interface> <startingIP> <endingIP> <mask> <default gateway> <leese time>\n";
         return 1;
     }
+
     struct in_addr startIp;
     struct in_addr endIp;
     inet_pton(AF_INET, argv[2], &startIp);
@@ -431,7 +421,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    DHCPReservationPool pool(argv[2],argv[3]);
+    int leeseTime = std::stoi(argv[6]);
+
+    DHCPReservationPool pool(argv[2],argv[3], leeseTime);
     pool.startThreadPrinting();
     pool.startThreadDecreasing();
     int sock = socketSetup(argv[1]);
@@ -455,13 +447,13 @@ int main(int argc, char *argv[]) {
 
         if(isDHCPDiscovery(&packet)){
             memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_offer_packet(&dhcp_offer, &packet, pool, argv[4], argv[5]);
+            fill_offer_packet(&dhcp_offer, &packet, pool, argv[4], argv[5],leeseTime);
             print_dhcp_packet(dhcp_offer);
         }
 
         if(isDHCPRequest(&packet)){
             memset(&dhcp_offer,0,sizeof(dhcp_offer));
-            fill_ack_packet(&dhcp_offer,&packet, pool, argv[4], argv[5]);
+            fill_ack_packet(&dhcp_offer,&packet, pool, argv[4], argv[5], leeseTime);
         }
 
         if(isDHCPAck(&packet)){
@@ -479,27 +471,10 @@ int main(int argc, char *argv[]) {
             print_mac_address(packet.chaddr);
             continue;
         }
-        // pool.printReservations();
-        // print_mac_address(packet.chaddr);
     }
     
     close(sock);
 
-    // DHCPReservationPool pool(argv[2],argv[3]);
-    // pool.printReservations();
-
-    // struct in_addr addr;
-
-    // std::cout<<"\n\n";
-
-    // inet_pton(AF_INET, "192.168.1.3", &(addr.s_addr));
-    // pool.startNewReservation(addr);
-    // inet_pton(AF_INET, "192.168.1.15", &(addr.s_addr));
-    // pool.startNewReservation(addr);
-    // inet_pton(AF_INET, "192.168.1.20", &(addr.s_addr));
-    // pool.startNewReservation(addr);
-
-    // pool.printReservations();
 
     return 0;
 }

@@ -15,8 +15,6 @@
 #include <string>
 #include <thread>
 
-#define RESERVATION_SECONDS 3600
-
 std::ostream& operator<<(std::ostream& os, const Status& status) {
     switch (status) {
         case Status::NONE:
@@ -54,9 +52,10 @@ void DHCPReservationPool::decreaseLeease(){
     }
 }
 
-DHCPReservationPool::DHCPReservationPool(const char* startIpAddress, const char* endIpAddress){
+DHCPReservationPool::DHCPReservationPool(const char* startIpAddress, const char* endIpAddress, int leeseTime_){
     inet_pton(AF_INET, startIpAddress, &startIp);
     inet_pton(AF_INET, endIpAddress, &endIp);
+    leeseTime = leeseTime_;
     createReservations();
 }
 
@@ -91,11 +90,11 @@ const char* DHCPReservationPool::startNewReservation(const unsigned char* chaddr
         if (res.getStatus() == Status::NONE) {
             res.setStatus(Status::IN_PROCESS);
             res.setChaddr(chaddr);
-            res.setLeaseInSeconds(RESERVATION_SECONDS);
+            res.setLeaseInSeconds(leeseTime);
             return res.getIpAddress_string();
-        } else if (res.getStatus() == Status::IN_PROCESS && std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0) {
+        } else if (std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0) {
             // The MAC address is already assigned to an IP address
-            res.getIpAddress_string();
+            return res.getIpAddress_string();
         }
     }
     return "false"; // No available reservations
@@ -106,7 +105,7 @@ const char* DHCPReservationPool::confirmReservation(const unsigned char* chaddr)
         if((res.getStatus() == Status::IN_PROCESS || res.getStatus() == Status::RESERVED) &&
             std::memcmp(res.getChaddr(), chaddr, sizeof(res.getChaddr())) == 0){
                 res.setStatus(Status::RESERVED);
-                res.setLeaseInSeconds(RESERVATION_SECONDS);
+                res.setLeaseInSeconds(leeseTime);
                 return res.getIpAddress_string();
         }
     }

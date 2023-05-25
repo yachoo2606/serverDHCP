@@ -83,6 +83,7 @@ void DHCPReservation::decreseLeese(){
             this->leeseInSeconds--;
             if(this->leeseInSeconds.count() == 0){
                 this->status = Status::NONE;
+                memset(&this->chaddr, 0, sizeof(this->chaddr));
             }
         }
     }
